@@ -7,9 +7,13 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 
-export type SessionPanel = "home" | "connections" | "flows" | "settings" | "new-sql-server";
+export type SessionPanel = "home" | "connections" | "flows";
 
-type Props = { onSelectPanel: (panel: SessionPanel) => void };
+type Props = {
+  onSelectPanel: (panel: SessionPanel) => void;
+  onOpenSettingsModal: () => void;
+  onOpenSqlServerModal: () => void;
+};
 
 const menuPanel: CSSProperties = {
   position: "absolute",
@@ -61,7 +65,7 @@ function useCanHoverSubmenus() {
   return v;
 }
 
-export function TopMenubar({ onSelectPanel }: Props) {
+export function TopMenubar({ onSelectPanel, onOpenSettingsModal, onOpenSqlServerModal }: Props) {
   const canHoverSubmenus = useCanHoverSubmenus();
 
   const [rootOpen, setRootOpen] = useState<"file" | "view" | null>(null);
@@ -197,11 +201,15 @@ export function TopMenubar({ onSelectPanel }: Props) {
                           role="menuitem"
                           style={itemLi}
                           tabIndex={0}
-                          onClick={() => pick("new-sql-server")}
+                          onClick={() => {
+                            onOpenSqlServerModal();
+                            closeAll();
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              pick("new-sql-server");
+                              onOpenSqlServerModal();
+                              closeAll();
                             }
                           }}
                         >
@@ -262,7 +270,15 @@ export function TopMenubar({ onSelectPanel }: Props) {
         )}
       </div>
 
-      <button type="button" role="menuitem" style={rootBtn} onClick={() => pick("settings")}>
+      <button
+        type="button"
+        role="menuitem"
+        style={rootBtn}
+        onClick={() => {
+          onOpenSettingsModal();
+          closeAll();
+        }}
+      >
         Settings
       </button>
     </div>
