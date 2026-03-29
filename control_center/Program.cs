@@ -15,10 +15,12 @@ builder.Services.AddGrpc(options =>
     options.Interceptors.Add<SharedSecretInterceptor>();
 });
 
+var webPort = builder.Environment.IsDevelopment() ? 5002 : 5000;
+
 builder.WebHost.ConfigureKestrel(options =>
 {
-    // HTTP/1.1 for web UI
-    options.ListenLocalhost(5000, o => o.Protocols = HttpProtocols.Http1AndHttp2);
+    // HTTP/1.1 for web UI (5002 in Development so Vite can use 5000)
+    options.ListenLocalhost(webPort, o => o.Protocols = HttpProtocols.Http1AndHttp2);
     // HTTP/2 for gRPC
     options.ListenLocalhost(5001, o => o.Protocols = HttpProtocols.Http2);
 });
