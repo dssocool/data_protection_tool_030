@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { TopMenubar, type SessionPanel } from "./TopMenubar";
+import { SqlServerConnectionForm } from "./SqlServerConnectionForm";
 
 type SessionInfo = { oid: string; tid: string };
 
@@ -55,11 +56,13 @@ function CenterModal({
   onClose,
   ariaLabel,
   onSave,
+  children,
 }: {
   open: boolean;
   onClose: () => void;
   ariaLabel: string;
   onSave?: () => void;
+  children?: ReactNode;
 }) {
   if (!open) return null;
   return (
@@ -77,7 +80,7 @@ function CenterModal({
         style={modalDialogStyle}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div style={{ flex: 1, minHeight: 0 }} />
+        <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>{children}</div>
         <footer style={modalFooterStyle}>
           <button
             type="button"
@@ -202,7 +205,9 @@ function App() {
         open={sqlServerModalOpen}
         onClose={closeSqlServerModal}
         ariaLabel="New SQL Server connection"
-      />
+      >
+        <SqlServerConnectionForm />
+      </CenterModal>
       <main style={{ ...mainStyle, flex: 1 }}>
         {panel === "home" && (
           <>
