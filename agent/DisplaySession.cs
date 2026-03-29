@@ -38,6 +38,7 @@ internal static class DisplaySession
                     FileName = url,
                     UseShellExecute = true
                 });
+                Console.WriteLine(url);
                 return;
             }
             catch (Exception ex)
