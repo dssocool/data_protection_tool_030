@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Threading;
 using Azure.Core;
@@ -88,46 +89,111 @@ var metadata = new Metadata
     { "x-agent-tid", tid }
 };
 
-using var call = client.Connect(metadata, cancellationToken: cts.Token);
-
-Console.WriteLine("Connected to Control Center. Streaming...");
-
-var sessionUrlGate = 0;
-var readTask = Task.Run(async () =>
+const int centerRetrySeconds = 10;
+AsyncDuplexStreamingCall<AgentMessage, ServerMessage>? call = null;
+while (!cts.Token.IsCancellationRequested)
 {
-    await foreach (var response in call.ResponseStream.ReadAllAsync(cts.Token))
+    AsyncDuplexStreamingCall<AgentMessage, ServerMessage>? attempt = null;
+    try
     {
-        if (string.Equals(response.Type, SessionUrlMessageType, StringComparison.OrdinalIgnoreCase))
-        {
-            if (Interlocked.CompareExchange(ref sessionUrlGate, 1, 0) == 0
-                && !string.IsNullOrWhiteSpace(response.Payload))
-                DisplaySession.OpenBrowserOrPrint(response.Payload);
-            continue;
-        }
-
-        Console.WriteLine($"[Server] Type={response.Type}, Payload={response.Payload}");
-    }
-}, cts.Token);
-
-try
-{
-    while (!cts.Token.IsCancellationRequested)
-    {
-        await call.RequestStream.WriteAsync(new AgentMessage
+        attempt = client.Connect(metadata, cancellationToken: cts.Token);
+        await attempt.RequestStream.WriteAsync(new AgentMessage
         {
             Type = "heartbeat",
             Payload = $"ping at {DateTime.UtcNow:O}"
         }, cts.Token);
+        call = attempt;
+        break;
+    }
+    catch (OperationCanceledException)
+    {
+        attempt?.Dispose();
+        return;
+    }
+    catch (Exception ex)
+    {
+        attempt?.Dispose();
+        if (!IsTransientConnectFailure(ex))
+        {
+            Console.Error.WriteLine($"Cannot connect to Control Center: {ex.Message}");
+            return;
+        }
 
-        Console.WriteLine("Sent heartbeat.");
-        await Task.Delay(TimeSpan.FromSeconds(5), cts.Token);
+        Console.WriteLine($"Control Center unreachable ({ex.Message}). Retrying in {centerRetrySeconds}s...");
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(centerRetrySeconds), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
     }
 }
-catch (OperationCanceledException) { }
-finally
+
+if (call is null)
+    return;
+
+using (call)
 {
-    await call.RequestStream.CompleteAsync();
-    Console.WriteLine("Disconnected.");
+    Console.WriteLine("Connected to Control Center. Streaming...");
+
+    var sessionUrlGate = 0;
+    var readTask = Task.Run(async () =>
+    {
+        await foreach (var response in call.ResponseStream.ReadAllAsync(cts.Token))
+        {
+            if (string.Equals(response.Type, SessionUrlMessageType, StringComparison.OrdinalIgnoreCase))
+            {
+                if (Interlocked.CompareExchange(ref sessionUrlGate, 1, 0) == 0
+                    && !string.IsNullOrWhiteSpace(response.Payload))
+                    DisplaySession.OpenBrowserOrPrint(response.Payload);
+                continue;
+            }
+
+            Console.WriteLine($"[Server] Type={response.Type}, Payload={response.Payload}");
+        }
+    }, cts.Token);
+
+    try
+    {
+        while (!cts.Token.IsCancellationRequested)
+        {
+            await call.RequestStream.WriteAsync(new AgentMessage
+            {
+                Type = "heartbeat",
+                Payload = $"ping at {DateTime.UtcNow:O}"
+            }, cts.Token);
+
+            Console.WriteLine("Sent heartbeat.");
+            await Task.Delay(TimeSpan.FromSeconds(5), cts.Token);
+        }
+    }
+    catch (OperationCanceledException) { }
+    finally
+    {
+        await call.RequestStream.CompleteAsync();
+        Console.WriteLine("Disconnected.");
+    }
+}
+
+static bool IsTransientConnectFailure(Exception ex)
+{
+    if (ex is AggregateException agg)
+    {
+        return agg.Flatten().InnerExceptions.Any(IsTransientConnectFailure);
+    }
+
+    return ex switch
+    {
+        RpcException rpc => rpc.StatusCode is StatusCode.Unavailable
+            or StatusCode.DeadlineExceeded
+            or StatusCode.Internal,
+        HttpRequestException => true,
+        SocketException => true,
+        IOException => true,
+        _ => false
+    };
 }
 
 static string GetArg(string[] args, string name, string defaultValue)

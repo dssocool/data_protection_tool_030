@@ -36,9 +36,16 @@ app.MapGrpcService<AgentService>();
 
 app.MapGet("/session/{token}", (string token, ISessionLinkService sessions) =>
 {
-    if (!sessions.TryGetSession(token, out var session) || session is null)
+    if (!sessions.TryGetSession(token, out _))
         return Results.NotFound("Session link expired or invalid.");
     return Results.Redirect($"/?session={Uri.EscapeDataString(token)}");
+});
+
+app.MapGet("/api/session/{token}", (string token, ISessionLinkService sessions) =>
+{
+    if (!sessions.TryGetSession(token, out var session) || session is null)
+        return Results.NotFound();
+    return Results.Json(new { oid = session.Oid, tid = session.Tid });
 });
 
 app.MapFallbackToFile("index.html");
