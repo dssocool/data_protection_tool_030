@@ -1,9 +1,30 @@
 using ControlCenter.Auth;
 using ControlCenter.Options;
 using ControlCenter.Services;
+using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddHttpLogging(options =>
+{
+    options.LoggingFields = HttpLoggingFields.All
+        & ~(HttpLoggingFields.RequestBody | HttpLoggingFields.ResponseBody);
+    if (builder.Environment.IsDevelopment())
+    {
+        options.LoggingFields |= HttpLoggingFields.RequestBody | HttpLoggingFields.ResponseBody;
+    }
+
+    foreach (var h in new[]
+             {
+                 "Host", "User-Agent", "Accept", "Content-Type", "Content-Length",
+                 "x-agent-oid", "x-agent-tid", "grpc-status", "grpc-message",
+             })
+    {
+        options.RequestHeaders.Add(h);
+        options.ResponseHeaders.Add(h);
+    }
+});
 
 builder.Services.AddMemoryCache();
 builder.Services.Configure<ControlCenterOptions>(
@@ -27,6 +48,8 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 var app = builder.Build();
+
+app.UseHttpLogging();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

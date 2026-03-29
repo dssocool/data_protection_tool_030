@@ -8,6 +8,7 @@ using Azure.Identity;
 using DataProtection.Grpc;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Microsoft.Extensions.Logging;
 
 const string SessionUrlMessageType = "session_url";
 const string SqlValidateRequestType = "sql_validate_request";
@@ -72,7 +73,29 @@ Console.CancelKeyPress += (_, e) =>
 
 AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
-using var channel = GrpcChannel.ForAddress(ServerAddress);
+using var loggerFactory = LoggerFactory.Create(logging =>
+{
+    logging.AddSimpleConsole(o =>
+    {
+        o.SingleLine = true;
+        o.TimestampFormat = "HH:mm:ss ";
+    });
+    logging.AddFilter((category, level) =>
+    {
+        if (string.IsNullOrEmpty(category))
+            return false;
+        if (category.StartsWith("Grpc.Net.Client", StringComparison.Ordinal) && level >= LogLevel.Information)
+            return true;
+        if (category.StartsWith("System.Net.Http", StringComparison.Ordinal) && level >= LogLevel.Debug)
+            return true;
+        return false;
+    });
+});
+
+using var channel = GrpcChannel.ForAddress(ServerAddress, new GrpcChannelOptions
+{
+    LoggerFactory = loggerFactory,
+});
 
 var client = new AgentHub.AgentHubClient(channel);
 
