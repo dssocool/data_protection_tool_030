@@ -17,7 +17,9 @@ public class AgentService : AgentHub.AgentHubBase
         IServerStreamWriter<ServerMessage> responseStream,
         ServerCallContext context)
     {
-        _logger.LogInformation("Agent connected from {Peer}", context.Peer);
+        var oid = context.RequestHeaders.GetValue("x-agent-oid") ?? "unknown";
+        var tid = context.RequestHeaders.GetValue("x-agent-tid") ?? "unknown";
+        _logger.LogInformation("Agent connected from {Peer} (oid={Oid}, tid={Tid})", context.Peer, oid, tid);
 
         try
         {

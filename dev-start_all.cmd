@@ -4,7 +4,7 @@ setlocal
 set SCRIPT_DIR=%~dp0
 
 echo === Starting Agent ===
-start "Agent" dotnet run --project "%SCRIPT_DIR%agent\agent.csproj"
+start "Agent" dotnet run --project "%SCRIPT_DIR%agent\agent.csproj" -- --mode native --env dev
 
 echo === Starting Control Center ===
 start "Control Center" dotnet run --project "%SCRIPT_DIR%control_center\control_center.csproj"

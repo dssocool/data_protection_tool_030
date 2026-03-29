@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== Starting Agent ==="
-dotnet run --project "$SCRIPT_DIR/agent/agent.csproj" &
+dotnet run --project "$SCRIPT_DIR/agent/agent.csproj" -- --mode native --env dev &
 AGENT_PID=$!
 
 echo "=== Starting Control Center ==="

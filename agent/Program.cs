@@ -1,3 +1,8 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Net;
+using System.Net.Sockets;
+using Azure.Core;
+using Azure.Identity;
 using DataProtection.Grpc;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -5,6 +10,54 @@ using Grpc.Net.Client;
 const string SharedSecret = "DATA_PROTECTION_SHARED_SECRET_2026";
 const string MetadataKey = "x-shared-secret";
 const string ServerAddress = "https://localhost:5001";
+
+var mode = GetArg(args, "--mode", "native");
+var env = GetArg(args, "--env", "dev");
+
+Console.WriteLine($"Agent starting in mode={mode}, env={env}");
+
+if (mode == "cloud")
+{
+    Console.WriteLine("Cloud mode is not yet implemented.");
+    return;
+}
+
+if (mode != "native")
+{
+    Console.Error.WriteLine($"Unknown mode: {mode}. Supported: native, cloud");
+    return;
+}
+
+string oid, tid;
+
+if (env == "prod")
+{
+    Console.WriteLine("Acquiring Azure identity token...");
+    var credential = new DefaultAzureCredential();
+    var tokenResult = await credential.GetTokenAsync(
+        new TokenRequestContext(new[] { "https://graph.microsoft.com/.default" }));
+
+    var handler = new JwtSecurityTokenHandler();
+    var jwt = handler.ReadJwtToken(tokenResult.Token);
+
+    oid = jwt.Claims.FirstOrDefault(c => c.Type == "oid")?.Value
+        ?? throw new InvalidOperationException("Token does not contain an 'oid' claim.");
+    tid = jwt.Claims.FirstOrDefault(c => c.Type == "tid")?.Value
+        ?? throw new InvalidOperationException("Token does not contain a 'tid' claim.");
+
+    Console.WriteLine($"Authenticated via Azure Identity. oid={oid}, tid={tid}");
+}
+else if (env == "dev")
+{
+    oid = Environment.UserName;
+    tid = GetLocalIpAddress();
+    Console.WriteLine($"Dev identity: oid={oid}, tid={tid}");
+}
+else
+{
+    Console.Error.WriteLine($"Unknown env: {env}. Supported: dev, prod");
+    return;
+}
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -28,7 +81,9 @@ var client = new AgentHub.AgentHubClient(channel);
 
 var metadata = new Metadata
 {
-    { MetadataKey, SharedSecret }
+    { MetadataKey, SharedSecret },
+    { "x-agent-oid", oid },
+    { "x-agent-tid", tid }
 };
 
 using var call = client.Connect(metadata, cancellationToken: cts.Token);
@@ -62,4 +117,28 @@ finally
 {
     await call.RequestStream.CompleteAsync();
     Console.WriteLine("Disconnected.");
+}
+
+static string GetArg(string[] args, string name, string defaultValue)
+{
+    for (int i = 0; i < args.Length - 1; i++)
+    {
+        if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+            return args[i + 1];
+    }
+    return defaultValue;
+}
+
+static string GetLocalIpAddress()
+{
+    try
+    {
+        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        socket.Connect("8.8.8.8", 80);
+        if (socket.LocalEndPoint is IPEndPoint endPoint)
+            return endPoint.Address.ToString();
+    }
+    catch { }
+
+    return "127.0.0.1";
 }
