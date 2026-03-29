@@ -20,11 +20,7 @@ builder.WebHost.ConfigureKestrel(options =>
     // HTTP/1.1 for web UI
     options.ListenLocalhost(5000, o => o.Protocols = HttpProtocols.Http1AndHttp2);
     // HTTP/2 for gRPC
-    options.ListenLocalhost(5001, o =>
-    {
-        o.Protocols = HttpProtocols.Http2;
-        o.UseHttps();
-    });
+    options.ListenLocalhost(5001, o => o.Protocols = HttpProtocols.Http2);
 });
 
 var app = builder.Build();

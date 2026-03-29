@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
-using System.Net.Http;
 using System.Net.Sockets;
 using System.Threading;
 using Azure.Core;
@@ -12,7 +11,7 @@ using Grpc.Net.Client;
 const string SessionUrlMessageType = "session_url";
 const string SharedSecret = "DATA_PROTECTION_SHARED_SECRET_2026";
 const string MetadataKey = "x-shared-secret";
-const string ServerAddress = "https://localhost:5001";
+const string ServerAddress = "http://localhost:5001";
 
 var mode = GetArg(args, "--mode", "native");
 var env = GetArg(args, "--env", "dev");
@@ -69,16 +68,9 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-var httpHandler = new HttpClientHandler
-{
-    ServerCertificateCustomValidationCallback =
-        HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-};
+AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
-using var channel = GrpcChannel.ForAddress(ServerAddress, new GrpcChannelOptions
-{
-    HttpHandler = httpHandler
-});
+using var channel = GrpcChannel.ForAddress(ServerAddress);
 
 var client = new AgentHub.AgentHubClient(channel);
 
