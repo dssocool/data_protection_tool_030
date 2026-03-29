@@ -9,6 +9,7 @@ builder.Services.AddMemoryCache();
 builder.Services.Configure<ControlCenterOptions>(
     builder.Configuration.GetSection(ControlCenterOptions.SectionName));
 builder.Services.AddSingleton<ISessionLinkService, SessionLinkService>();
+builder.Services.AddSingleton<IAgentConnectionRegistry, AgentConnectionRegistry>();
 
 builder.Services.AddGrpc(options =>
 {
@@ -45,6 +46,28 @@ app.MapGet("/api/session/{token}", (string token, ISessionLinkService sessions) 
         return Results.NotFound();
     return Results.Json(new { oid = session.Oid, tid = session.Tid });
 });
+
+app.MapPost(
+    "/api/session/{token}/connections/sql/validate",
+    async (
+        string token,
+        ISessionLinkService sessions,
+        IAgentConnectionRegistry registry,
+        SqlValidateRequestBody body,
+        CancellationToken cancellationToken) =>
+    {
+        if (!sessions.TryGetSession(token, out var session) || session is null)
+            return Results.NotFound();
+        if (string.IsNullOrWhiteSpace(body.ServerName))
+            return Results.BadRequest(new { message = "Server name is required." });
+
+        var (ok, message) = await registry.SendSqlValidateAsync(
+            session.Oid,
+            session.Tid,
+            body,
+            cancellationToken);
+        return Results.Json(new { ok, message });
+    });
 
 app.MapFallbackToFile("index.html");
 

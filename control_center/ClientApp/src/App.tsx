@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { TopMenubar, type SessionPanel } from "./TopMenubar";
-import { SqlServerConnectionForm } from "./SqlServerConnectionForm";
+import { SqlServerModal } from "./SqlServerModal";
 
 type SessionInfo = { oid: string; tid: string };
 
@@ -201,13 +201,9 @@ function App() {
         onOpenSqlServerModal={() => setSqlServerModalOpen(true)}
       />
       <CenterModal open={settingsModalOpen} onClose={closeSettingsModal} ariaLabel="Settings" />
-      <CenterModal
-        open={sqlServerModalOpen}
-        onClose={closeSqlServerModal}
-        ariaLabel="New SQL Server connection"
-      >
-        <SqlServerConnectionForm />
-      </CenterModal>
+      {session && (
+        <SqlServerModal open={sqlServerModalOpen} onClose={closeSqlServerModal} sessionToken={session} />
+      )}
       <main style={{ ...mainStyle, flex: 1 }}>
         {panel === "home" && (
           <>
