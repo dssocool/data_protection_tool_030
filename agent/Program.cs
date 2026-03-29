@@ -1,12 +1,14 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using Azure.Core;
 using Azure.Identity;
 using DataProtection.Grpc;
 using Grpc.Core;
 using Grpc.Net.Client;
 
+const string SessionUrlMessageType = "session_url";
 const string SharedSecret = "DATA_PROTECTION_SHARED_SECRET_2026";
 const string MetadataKey = "x-shared-secret";
 const string ServerAddress = "https://localhost:5001";
@@ -90,10 +92,19 @@ using var call = client.Connect(metadata, cancellationToken: cts.Token);
 
 Console.WriteLine("Connected to Control Center. Streaming...");
 
+var sessionUrlGate = 0;
 var readTask = Task.Run(async () =>
 {
     await foreach (var response in call.ResponseStream.ReadAllAsync(cts.Token))
     {
+        if (string.Equals(response.Type, SessionUrlMessageType, StringComparison.OrdinalIgnoreCase))
+        {
+            if (Interlocked.CompareExchange(ref sessionUrlGate, 1, 0) == 0
+                && !string.IsNullOrWhiteSpace(response.Payload))
+                DisplaySession.OpenBrowserOrPrint(response.Payload);
+            continue;
+        }
+
         Console.WriteLine($"[Server] Type={response.Type}, Payload={response.Payload}");
     }
 }, cts.Token);

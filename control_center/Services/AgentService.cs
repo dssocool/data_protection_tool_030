@@ -1,15 +1,26 @@
+using ControlCenter.Options;
 using DataProtection.Grpc;
 using Grpc.Core;
+using Microsoft.Extensions.Options;
 
 namespace ControlCenter.Services;
 
 public class AgentService : AgentHub.AgentHubBase
 {
-    private readonly ILogger<AgentService> _logger;
+    public const string SessionUrlMessageType = "session_url";
 
-    public AgentService(ILogger<AgentService> logger)
+    private readonly ILogger<AgentService> _logger;
+    private readonly ControlCenterOptions _options;
+    private readonly ISessionLinkService _sessionLinks;
+
+    public AgentService(
+        ILogger<AgentService> logger,
+        IOptions<ControlCenterOptions> options,
+        ISessionLinkService sessionLinks)
     {
         _logger = logger;
+        _options = options.Value;
+        _sessionLinks = sessionLinks;
     }
 
     public override async Task Connect(
@@ -20,6 +31,15 @@ public class AgentService : AgentHub.AgentHubBase
         var oid = context.RequestHeaders.GetValue("x-agent-oid") ?? "unknown";
         var tid = context.RequestHeaders.GetValue("x-agent-tid") ?? "unknown";
         _logger.LogInformation("Agent connected from {Peer} (oid={Oid}, tid={Tid})", context.Peer, oid, tid);
+
+        var token = _sessionLinks.RegisterSession(oid, tid);
+        var baseUrl = _options.PublicBaseUrl.TrimEnd('/');
+        var sessionUrl = $"{baseUrl}/session/{token}";
+        await responseStream.WriteAsync(new ServerMessage
+        {
+            Type = SessionUrlMessageType,
+            Payload = sessionUrl
+        }, context.CancellationToken);
 
         try
         {

@@ -1,8 +1,14 @@
 using ControlCenter.Auth;
+using ControlCenter.Options;
 using ControlCenter.Services;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddMemoryCache();
+builder.Services.Configure<ControlCenterOptions>(
+    builder.Configuration.GetSection(ControlCenterOptions.SectionName));
+builder.Services.AddSingleton<ISessionLinkService, SessionLinkService>();
 
 builder.Services.AddGrpc(options =>
 {
@@ -27,6 +33,13 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.MapGrpcService<AgentService>();
+
+app.MapGet("/session/{token}", (string token, ISessionLinkService sessions) =>
+{
+    if (!sessions.TryGetSession(token, out var session) || session is null)
+        return Results.NotFound("Session link expired or invalid.");
+    return Results.Redirect($"/?session={Uri.EscapeDataString(token)}");
+});
 
 app.MapFallbackToFile("index.html");
 
