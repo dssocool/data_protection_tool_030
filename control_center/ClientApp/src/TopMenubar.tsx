@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 
 export type SessionPanel = "home" | "connections" | "flows" | "settings" | "new-sql-server";
 
@@ -41,29 +48,27 @@ const rootBtn: CSSProperties = {
   borderRadius: 4,
 };
 
-export function TopMenubar({ onSelectPanel }: Props) {
-  const [fineHover, setFineHover] = useState(true);
+/** True when nested File submenus can rely on hover (fine pointer + hover capability). */
+function useCanHoverSubmenus() {
+  const [v, setV] = useState(true);
   useEffect(() => {
     const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
-    const sync = () => setFineHover(mq.matches);
+    const sync = () => setV(mq.matches);
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
+  return v;
+}
+
+export function TopMenubar({ onSelectPanel }: Props) {
+  const canHoverSubmenus = useCanHoverSubmenus();
 
   const [rootOpen, setRootOpen] = useState<"file" | "view" | null>(null);
   const [fileNewOpen, setFileNewOpen] = useState(false);
   const [fileConnOpen, setFileConnOpen] = useState(false);
 
-  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
-
-  const cancelClose = useCallback(() => {
-    if (leaveTimer.current) {
-      clearTimeout(leaveTimer.current);
-      leaveTimer.current = null;
-    }
-  }, []);
 
   const closeAll = useCallback(() => {
     setRootOpen(null);
@@ -71,19 +76,13 @@ export function TopMenubar({ onSelectPanel }: Props) {
     setFileConnOpen(false);
   }, []);
 
-  const scheduleClose = useCallback(() => {
-    cancelClose();
-    leaveTimer.current = setTimeout(closeAll, 220);
-  }, [cancelClose, closeAll]);
-
   useEffect(() => {
-    if (fineHover) return;
     const onDocDown = (e: MouseEvent) => {
       if (!barRef.current?.contains(e.target as Node)) closeAll();
     };
     document.addEventListener("mousedown", onDocDown);
     return () => document.removeEventListener("mousedown", onDocDown);
-  }, [fineHover, closeAll]);
+  }, [closeAll]);
 
   const pick = (panel: SessionPanel) => {
     onSelectPanel(panel);
@@ -91,35 +90,35 @@ export function TopMenubar({ onSelectPanel }: Props) {
   };
 
   const openFile = () => {
-    cancelClose();
     setRootOpen("file");
     setFileNewOpen(false);
     setFileConnOpen(false);
   };
 
   const openView = () => {
-    cancelClose();
     setRootOpen("view");
   };
 
   const toggleFile = () => {
-    cancelClose();
     if (rootOpen === "file") closeAll();
     else openFile();
   };
 
   const toggleView = () => {
-    cancelClose();
     if (rootOpen === "view") closeAll();
     else openView();
+  };
+
+  const leaveLi = (e: ReactMouseEvent<HTMLLIElement>, onLeave: () => void) => {
+    const next = e.relatedTarget as Node | null;
+    if (next && e.currentTarget.contains(next)) return;
+    onLeave();
   };
 
   return (
     <div
       ref={barRef}
       role="menubar"
-      onMouseEnter={fineHover ? cancelClose : undefined}
-      onMouseLeave={fineHover ? scheduleClose : undefined}
       style={{
         display: "flex",
         alignItems: "stretch",
@@ -136,8 +135,7 @@ export function TopMenubar({ onSelectPanel }: Props) {
           aria-haspopup="menu"
           aria-expanded={rootOpen === "file"}
           style={rootBtn}
-          onMouseEnter={fineHover ? openFile : undefined}
-          onClick={fineHover ? undefined : toggleFile}
+          onClick={toggleFile}
         >
           File
         </button>
@@ -147,19 +145,28 @@ export function TopMenubar({ onSelectPanel }: Props) {
               role="none"
               style={itemLi}
               onMouseEnter={
-                fineHover
+                canHoverSubmenus
                   ? () => {
                       setFileNewOpen(true);
                       setFileConnOpen(false);
                     }
                   : undefined
               }
+              onMouseLeave={
+                canHoverSubmenus
+                  ? (e) =>
+                      leaveLi(e, () => {
+                        setFileNewOpen(false);
+                        setFileConnOpen(false);
+                      })
+                  : undefined
+              }
               onClick={
-                fineHover
+                canHoverSubmenus
                   ? undefined
-                  : (e) => {
-                      e.stopPropagation();
-                      setFileNewOpen((v) => !v);
+                  : (ev) => {
+                      ev.stopPropagation();
+                      setFileNewOpen((x) => !x);
                       setFileConnOpen(false);
                     }
               }
@@ -170,13 +177,16 @@ export function TopMenubar({ onSelectPanel }: Props) {
                   <li
                     role="none"
                     style={itemLi}
-                    onMouseEnter={fineHover ? () => setFileConnOpen(true) : undefined}
+                    onMouseEnter={canHoverSubmenus ? () => setFileConnOpen(true) : undefined}
+                    onMouseLeave={
+                      canHoverSubmenus ? (e) => leaveLi(e, () => setFileConnOpen(false)) : undefined
+                    }
                     onClick={
-                      fineHover
+                      canHoverSubmenus
                         ? undefined
-                        : (e) => {
-                            e.stopPropagation();
-                            setFileConnOpen((v) => !v);
+                        : (ev) => {
+                            ev.stopPropagation();
+                            setFileConnOpen((x) => !x);
                           }
                     }
                   >
@@ -214,8 +224,7 @@ export function TopMenubar({ onSelectPanel }: Props) {
           aria-haspopup="menu"
           aria-expanded={rootOpen === "view"}
           style={rootBtn}
-          onMouseEnter={fineHover ? openView : undefined}
-          onClick={fineHover ? undefined : toggleView}
+          onClick={toggleView}
         >
           View
         </button>
